@@ -1,16 +1,16 @@
 # alma-plugin-bedrock
 
-AWS Bedrock provider plugin for [Alma](https://github.com/yetone/alma). Adds support for Claude models via Amazon Bedrock using API Key authentication.
+AWS Bedrock provider plugin for [Alma](https://alma.now/). Adds support for Claude models via Amazon Bedrock using API Key authentication.
 
 ## Installation
 
 In Alma, go to **Settings → Plugins → Install Plugin → URL**, then enter:
 
 ```
-https://github.com/hephyr/alma-bedrock#release
+https://github.com/hephyr/alma-bedrock-claude-plugin/tree/release
 ```
 
-> The `#release` branch contains pre-built artifacts. The `main` branch holds source code only.
+> The `release` branch contains pre-built artifacts. The `main` branch holds source code only.
 
 ## Configuration
 
