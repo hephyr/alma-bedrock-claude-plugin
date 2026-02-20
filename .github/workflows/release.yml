@@ -32,20 +32,11 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Prepare release artifacts
-        run: |
-          mkdir -p /tmp/release
-          cp -r dist         /tmp/release/dist
-          cp manifest.json   /tmp/release/manifest.json
-          cp package.json    /tmp/release/package.json
-          cp README.md       /tmp/release/README.md
-          [ -f LICENSE ] && cp LICENSE /tmp/release/LICENSE || true
-
       - name: Deploy to release branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: release
-          publish_dir: /tmp/release
+          publish_dir: dist
           force_orphan: true
           commit_message: 'chore: release build from ${{ github.sha }}'

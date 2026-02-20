@@ -1,23 +1,54 @@
-import type { PluginContext, ModelCapabilities, ProviderModel } from 'alma-plugin-api';
+import type { PluginContext, Storage } from 'alma-plugin-api';
 import AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
-import {
-    BedrockClient as AWSBedrockClient,
-    ListInferenceProfilesCommand,
-} from '@aws-sdk/client-bedrock';
+
+export interface ModelCapabilities {
+    vision?: boolean;
+    functionCalling?: boolean;
+    streaming?: boolean;
+    reasoning?: boolean;
+    contextWindow?: number;
+    maxOutputTokens?: number;
+}
+
+export interface ProviderModel {
+    id: string;
+    name: string;
+    capabilities?: ModelCapabilities;
+}
+
+interface InferenceProfile {
+    inferenceProfileId: string;
+    inferenceProfileName: string;
+    status: string;
+}
+
+interface ListInferenceProfilesResponse {
+    inferenceProfileSummaries?: InferenceProfile[];
+    nextToken?: string;
+}
 
 export class BedrockClient {
     private anthropicClient: AnthropicBedrock | null = null;
-    private controlClient: AWSBedrockClient | null = null;
+    private region = '';
+    private apiKey = '';
     private logger: PluginContext['logger'];
+    private storage: Storage;
+    private modelsCache: Promise<ProviderModel[]> | null = null;
 
     constructor(context: PluginContext) {
         this.logger = context.logger;
+        this.storage = context.storage.local;
         this.init(context);
     }
 
     reload(context: PluginContext): void {
+        const newRegion = context.settings.get<string>('bedrock.region', 'us-east-1');
+        const newApiKey = context.settings.get<string>('bedrock.apiKey', '');
+        if (newRegion === this.region && newApiKey === this.apiKey) return;
+
         this.anthropicClient = null;
-        this.controlClient = null;
+        this.modelsCache = null;
+        this.storage.delete('models');
         this.init(context);
     }
 
@@ -41,66 +72,75 @@ export class BedrockClient {
     // ─── Initialization ───────────────────────────────────────────────
 
     private init(context: PluginContext): void {
-        const region = context.settings.get<string>('bedrock.region', 'us-east-1');
-        const apiKey = context.settings.get<string>('bedrock.apiKey', '');
+        this.region = context.settings.get<string>('bedrock.region', 'us-east-1');
+        this.apiKey = context.settings.get<string>('bedrock.apiKey', '');
 
-        if (!apiKey) return;
+        if (!this.apiKey) return;
 
-        // AnthropicBedrock with skipAuth + custom fetch to inject Bearer token
         this.anthropicClient = new AnthropicBedrock({
-            awsRegion: region,
+            awsRegion: this.region,
             skipAuth: true,
             fetch: (url: RequestInfo | URL, init?: RequestInit) => {
                 const headers = new Headers(init?.headers);
-                headers.set('authorization', `Bearer ${apiKey}`);
+                headers.set('authorization', `Bearer ${this.apiKey}`);
                 return fetch(url, { ...init, headers });
             },
         });
 
-        // controlClient for ListInferenceProfilesCommand (model listing)
-        const controlEndpoint = `https://bedrock.${region}.amazonaws.com`;
-        const dummyCreds = { accessKeyId: 'unused', secretAccessKey: 'unused' };
-
-        const apiKeyMiddleware = (next: any) => async (args: any) => {
-            if (args.request?.headers) {
-                args.request.headers['authorization'] = `Bearer ${apiKey}`;
-                delete args.request.headers['x-amz-date'];
-                delete args.request.headers['x-amz-security-token'];
-                delete args.request.headers['x-amz-content-sha256'];
-            }
-            return next(args);
-        };
-        const middlewareOpts = { step: 'finalizeRequest' as const, name: 'apiKeyAuth', priority: 'low' as const };
-
-        this.controlClient = new AWSBedrockClient({
-            endpoint: controlEndpoint,
-            region,
-            credentials: dummyCreds,
-        });
-        this.controlClient.middlewareStack.add(apiKeyMiddleware, middlewareOpts);
-
-        this.logger.info(`Bedrock client initialized (region: ${region})`);
+        this.logger.info(`Bedrock client initialized (region: ${this.region})`);
     }
 
     // ─── Model listing ────────────────────────────────────────────────
 
-    async listModels(): Promise<ProviderModel[]> {
-        if (!this.controlClient) {
+    listModels(): Promise<ProviderModel[]> {
+        if (!this.apiKey) {
             throw new Error('Bedrock not configured. Set API Key in plugin settings.');
         }
 
+        if (!this.modelsCache) {
+            this.modelsCache = this.loadModels().catch((err) => {
+                this.modelsCache = null;
+                throw err;
+            });
+        }
+        return this.modelsCache;
+    }
+
+    private async loadModels(): Promise<ProviderModel[]> {
+        const cached = await this.storage.get<ProviderModel[]>('models');
+        if (cached) {
+            this.refreshModelsInBackground();
+            return cached;
+        }
+        return this.fetchModels();
+    }
+
+    private refreshModelsInBackground(): void {
+        this.fetchModels()
+            .then((models) => { this.modelsCache = Promise.resolve(models); })
+            .catch((err) => { this.logger.warn(`Background model refresh failed: ${err}`); });
+    }
+
+    private async fetchModels(): Promise<ProviderModel[]> {
         const models: ProviderModel[] = [];
         let nextToken: string | undefined;
 
         do {
-            const resp = await this.controlClient.send(
-                new ListInferenceProfilesCommand({
-                    maxResults: 100,
-                    ...(nextToken ? { nextToken } : {}),
-                })
-            );
+            const url = new URL(`https://bedrock.${this.region}.amazonaws.com/inference-profiles`);
+            url.searchParams.set('maxResults', '100');
+            if (nextToken) url.searchParams.set('nextToken', nextToken);
 
-            for (const p of resp.inferenceProfileSummaries ?? []) {
+            const resp = await fetch(url, {
+                headers: { authorization: `Bearer ${this.apiKey}` },
+            });
+
+            if (!resp.ok) {
+                throw new Error(`Failed to list inference profiles: ${resp.status} ${resp.statusText}`);
+            }
+
+            const data: ListInferenceProfilesResponse = await resp.json();
+
+            for (const p of data.inferenceProfileSummaries ?? []) {
                 if (
                     p.inferenceProfileId &&
                     p.inferenceProfileName &&
@@ -114,10 +154,11 @@ export class BedrockClient {
                     });
                 }
             }
-            nextToken = resp.nextToken;
+            nextToken = data.nextToken;
         } while (nextToken);
 
         this.logger.info(`Fetched ${models.length} Claude inference profiles`);
+        await this.storage.set('models', models);
         return models;
     }
 

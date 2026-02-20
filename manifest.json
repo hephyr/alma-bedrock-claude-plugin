@@ -6,7 +6,7 @@
   "author": {
     "name": "Hefeng Xu"
   },
-  "main": "dist/index.js",
+  "main": "main.js",
   "type": "provider",
   "engines": {
     "alma": ">=1.0.0"
@@ -20,6 +20,11 @@
     "onStartup"
   ],
   "contributes": {
+    "providers": [{
+      "id": "alma-plugin-bedrock",
+      "name": "AWS Bedrock",
+      "authType": "api-key"
+    }],
     "commands": [],
     "configuration": {
       "title": "Amazon Bedrock",

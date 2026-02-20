@@ -1,9 +1,11 @@
 import type { PluginContext, PluginActivation } from 'alma-plugin-api';
-import { BedrockClient } from './bedrock.js';
+import { BedrockClient } from './lib/bedrock.js';
 
 export async function activate(context: PluginContext): Promise<PluginActivation> {
     const client = new BedrockClient(context);
 
+    // Cast needed: alma-plugin-api types lag behind the runtime API which
+    // supports authType, sdkType, isAuthenticated, and getSDKConfig.
     const disposable = context.providers.register({
         id: 'alma-plugin-bedrock',
         name: 'AWS Bedrock',
@@ -14,7 +16,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
         isAuthenticated: () => client.isReady(),
         getModels: () => client.listModels(),
         getSDKConfig: () => client.getSDKConfig(),
-    });
+    } as any);
 
     const settingsDisposable = context.settings.onDidChange((e) => {
         if (e.key.startsWith('bedrock.')) client.reload(context);
