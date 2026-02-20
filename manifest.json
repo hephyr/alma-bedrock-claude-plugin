@@ -1,0 +1,45 @@
+{
+  "id": "alma-plugin-bedrock",
+  "name": "Amazon Bedrock",
+  "version": "0.1.0",
+  "description": "Amazon Bedrock provider plugin for Alma",
+  "author": {
+    "name": "Hefeng Xu"
+  },
+  "main": "main.js",
+  "type": "provider",
+  "engines": {
+    "alma": ">=1.0.0"
+  },
+  "permissions": [
+    "network",
+    "secrets",
+    "providers:manage"
+  ],
+  "activationEvents": [
+    "onStartup"
+  ],
+  "contributes": {
+    "providers": [{
+      "id": "alma-plugin-bedrock",
+      "name": "AWS Bedrock",
+      "authType": "api-key"
+    }],
+    "commands": [],
+    "configuration": {
+      "title": "Amazon Bedrock",
+      "properties": {
+        "bedrock.region": {
+          "type": "string",
+          "default": "us-east-1",
+          "description": "AWS Region"
+        },
+        "bedrock.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API Key"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "alma-plugin-bedrock",
+  "displayName": "AWS Bedrock",
+  "description": "AWS Bedrock provider plugin for Alma - supports AK/SK and API Key authentication",
+  "version": "0.1.0",
+  "type": "provider",
+  "main": "dist/main.js",
+  "engines": {
+    "alma": ">=1.0.0"
+  },
+  "scripts": {
+    "build": "esbuild main.ts --bundle --platform=node --target=es2022 --format=cjs --outfile=dist/main.js --sourcemap && cp manifest.json package.json README.md dist/",
+    "dev": "esbuild main.ts --bundle --platform=node --target=es2022 --format=cjs --outfile=dist/main.js --sourcemap --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.26.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "alma-plugin-api": "latest",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "alma",
+    "plugin",
+    "aws",
+    "bedrock",
+    "provider",
+    "llm"
+  ],
+  "license": "MIT"
+}
